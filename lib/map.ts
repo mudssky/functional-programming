@@ -6,7 +6,7 @@
  */
 function map<T>(
   array: Array<T>,
-  iteratee: (arg0: T, arg1: number, arg2: T[]) => any
+  iteratee: (arg0: T, arg1: number, arg2: T[]) => T
 ) {
   let index = -1
   const length = array == null ? 0 : array.length

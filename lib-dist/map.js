@@ -1,5 +1,5 @@
 "use strict";
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 /**
  *
  * @param array - input Array<T>
@@ -7,12 +7,12 @@ exports.__esModule = true;
  * @returns - outpur new Array<T>
  */
 function map(array, iteratee) {
-    var index = -1;
-    var length = array == null ? 0 : array.length;
-    var result = new Array(length);
+    let index = -1;
+    const length = array == null ? 0 : array.length;
+    const result = new Array(length);
     while (++index < length) {
         result[index] = iteratee(array[index], index, array);
     }
     return result;
 }
-exports["default"] = map;
+exports.default = map;
