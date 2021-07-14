@@ -6,8 +6,9 @@
 function funcTimelog(func: (...args: any) => any) {
   return function (...args: any) {
     console.time(func.name)
-    func(args)
+    const result = func(args)
     console.timeEnd(func.name)
+    return result
   }
 }
 

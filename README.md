@@ -41,10 +41,11 @@ greeting // "Hi, Brianne"
 **纯函数的几个特性**:
 
 - 无**副作用(Side effects)**
-- 可缓存性
-- 可移植性,自文档化
-- 可测试性
-- 合理性,引用透明性
+- 可缓存性 (Cacheable)
+- 可移植性,自文档化（Portable / Self-Documenting）
+- 可测试性（Testable）
+- 合理性,引用透明性（Reasonable）
+- 并行运算
 
 ### 2.特性1:无副作用(Side effects)
 
@@ -90,4 +91,114 @@ var memoize = function(f) {
   };
 };
 ```
+
+
+
+下面是我参考lodash的代码用typescript写的memoize函数，
+
+lodash的代码里面用给函数加cache属性的方式，但是在typescript里面函数是不能用`.`语法随便添加属性的。
+
+所以我实现的版本没办法查看缓存究竟有多少
+
+```typescript
+/**
+ *
+ * 传入一个函数,返回它的带缓存版本,
+ * 缺点是缓存在闭包里面没办法获取,也没办法消除.
+ * 第二个参数resolver是用来产生缓存的key的函数,如果你不提供这个函数,将会用函数的第一个参数作为key
+ * @param func 需要缓存的函数
+ * @param resolver 生成缓存key的映射的函数
+ */
+function memoize(
+  func: (...args: any) => any,
+  resolver?: (...args: any) => any
+): (...args: any) => any {
+  // func 和 resolve需要都是函数类型
+  if (
+    typeof func !== 'function' ||
+    (resolver != null && typeof resolver !== 'function')
+  ) {
+    throw new TypeError('Expected a function')
+  }
+  const cache = new Map()
+  const memoized = function (...args: any): any {
+    const key = resolver ? resolver(args) : args[0]
+    if (cache.has(key)) {
+      return cache.get(key)
+    }
+    const result = func(args)
+    cache.set(key, result)
+    return result
+  }
+  return memoized
+}
+export default memoize
+```
+
+下面是编译成es2015的代码，基本上除了没有类型也没什么变化了。
+
+```javascript
+/**
+ *
+ * 传入一个函数,返回它的带缓存版本,
+ * 缺点是缓存在闭包里面没办法获取,也没办法消除.
+ * 第二个参数resolver是用来产生缓存的key的函数,如果你不提供这个函数,将会用函数的第一个参数作为key
+ * @param func 需要缓存的函数
+ * @param resolver 生成缓存key的映射的函数
+ */
+function memoize(func, resolver) {
+    // func 和 resolve需要都是函数类型
+    if (typeof func !== 'function' ||
+        (resolver != null && typeof resolver !== 'function')) {
+        throw new TypeError('Expected a function');
+    }
+    var cache = new Map();
+    var memoized = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        var key = resolver ? resolver(args) : args[0];
+        if (cache.has(key)) {
+            return cache.get(key);
+        }
+        var result = func(args);
+        cache.set(key, result);
+        return result;
+    };
+    return memoized;
+}
+```
+
+### 4.特性3：可移植性,自文档化（Portable / Self-Documenting）
+
+纯函数的依赖很明确，因此更易于观察和理解
+
+因为他们与环境无关，所以可以拷贝到任何地方运行，提高了代码的复用性。
+
+对比面向对象，你从类中拷贝一个方法，就要麻烦得多。
+
+### 5.特性4：可测试性（Testable）
+
+纯函数让测试更加容易。
+
+只需要给定输入，断言输出就可以了。
+
+甚至有专门的测试工具帮我们自动生成输入，并断言输出。
+
+比如**Quickcheck**
+
+### 6.特性5：引用透明性(referential transparency)，合理性（Reasonable）
+
+一个表达式能够被它的值替代而不改变程序的行为称为引用透明。
+
+```typescript
+const greet = () => 'hello, world.'
+```
+
+### 7.特性6：可以并行运行
+
+我们可以并行运行任意纯函数。因为纯函数根本不需要访问共享的内存，而且根据其定义，纯函数也不会因副作用而进入竞争态（race condition）。
+
+js毕竟是个单线程的语言，在其他多线程的语言里面这个作用就比较明显了，比如golang，比如julia，利用纯函数的特性并行计算，可以充分利用计算机的性能。
 

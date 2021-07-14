@@ -9,7 +9,7 @@
 function memoize(
   func: (...args: any) => any,
   resolver?: (...args: any) => any
-): any {
+): (...args: any) => any {
   // func 和 resolve需要都是函数类型
   if (
     typeof func !== 'function' ||
@@ -18,8 +18,9 @@ function memoize(
     throw new TypeError('Expected a function')
   }
   const cache = new Map()
-  const memoized = function (...args: any): any {
-    const key = resolver ? resolver(args) : args[0]
+  return function (...args: any): any {
+    const key = resolver ? resolver(args) : args[0][0]
+    // console.log(key)
     if (cache.has(key)) {
       return cache.get(key)
     }
@@ -28,19 +29,18 @@ function memoize(
     return result
   }
 }
-import funcTimelog from './funcTimelog'
-function factorial(n: number): number {
-  if (n == 1) {
-    return n
-  }
-  return n * factorial(n - 1)
-}
+// import funcTimelog from './funcTimelog'
+// function factorial(n: number): number {
+//   if (n == 1) {
+//     return n
+//   }
+//   return n * factorial(n - 1)
+// }
+// function fibonacci(n: number): number {
+//   if (n === 1 || n === 2) {
+//     return 1
+//   }
+//   return fibonacci(n - 1) + fibonacci(n - 2)
+// }
 
-const facT = funcTimelog(factorial)
-const memof = memoize(factorial)
-// const fact2 = funcTimelog(memof)
-
-facT(10)
-console.log(memof(10))
-// fact2(10)
 export default memoize
