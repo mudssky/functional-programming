@@ -1,3 +1,5 @@
+# 排除tsc生成的文件
+lib-dist
 # Logs
 logs
 *.log
