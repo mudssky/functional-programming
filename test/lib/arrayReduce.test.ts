@@ -1,4 +1,4 @@
-import reduceArray from '../lib/reduce'
+import reduceArray from '../../lib/reduce'
 test('normal test', () => {
   const testFn = (x, y) => x + y
   const inputArr = [1, 2, 3]

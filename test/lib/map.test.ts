@@ -1,4 +1,4 @@
-import map from '../lib/map'
+import map from '../../lib/map'
 
 test('map', () => {
   const testFn = (x: number) => x * x
