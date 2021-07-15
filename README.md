@@ -202,3 +202,21 @@ const greet = () => 'hello, world.'
 
 js毕竟是个单线程的语言，在其他多线程的语言里面这个作用就比较明显了，比如golang，比如julia，利用纯函数的特性并行计算，可以充分利用计算机的性能。
 
+## 02.柯里化
+
+**柯里化**  将一个多元函数转变为一元函数的过程。 每当函数被调用时，它仅仅接收一个参数并且返回带有一个参数的函数，直到传递完所有的参数。
+
+下面是例子
+
+```javascript
+const sum = (a, b) => a + b
+
+const curriedSum = (a) => (b) => a + b
+
+curriedSum(3)(4)         // 7
+
+const add2 = curriedSum(2)
+
+add2(10)     // 
+```
+
