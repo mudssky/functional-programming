@@ -797,3 +797,98 @@ const trace = curry(function (tag: string, x: any): any {
 export default trace
 ```
 
+## 04.类型签名(Type Signatures)
+
+虽然typescript也有类型,但是当你用compose把函数串联起来的最终函数,是显示不出中间的路径的.
+
+所以我们要给自己的代码添加类型注释,以便让自己以后还能看懂自己的代码.
+
+
+
+这次我们介绍的是一种比较通用的类型注释系统 Hindley-Milner函数签名 .
+
+下面是一些常见函数类型的写法,一个箭头表示一次传参.
+
+```js
+//  capitalize :: String -> String
+var capitalize = function(s){
+  return toUpperCase(head(s)) + toLowerCase(tail(s));
+}
+
+capitalize("smurf");
+//=> "Smurf"
+```
+
+```js
+//  strLength :: String -> Number
+var strLength = function(s){
+  return s.length;
+}
+
+//  join :: String -> [String] -> String
+var join = curry(function(what, xs){
+  return xs.join(what);
+});
+
+//  match :: Regex -> String -> [String]
+var match = curry(function(reg, s){
+  return s.match(reg);
+});
+
+//  replace :: Regex -> String -> String -> String
+var replace = curry(function(reg, sub, s){
+  return s.replace(reg, sub);
+});
+
+// 下面的a,b属于任意类型
+//  id :: a -> a
+var id = function(x){ return x; }
+
+//  map :: (a -> b) -> [a] -> [b]
+var map = curry(function(f, xs){
+  return xs.map(f);
+});
+//  head :: [a] -> a
+var head = function(xs){ return xs[0]; }
+
+//  filter :: (a -> Bool) -> [a] -> [a]
+var filter = curry(function(f, xs){
+  return xs.filter(f);
+});
+
+//  reduce :: (b -> a -> b) -> b -> [a] -> b
+var reduce = curry(function(f, x, xs){
+  return xs.reduce(f, x);
+});
+```
+
+### 自由定理（free theorems）
+
+类型签名除了能够帮助我们推断函数可能的实现，还能够给我们带来*自由定理*（free theorems）
+
+下面是两个例子
+
+```js
+// head :: [a] -> a
+compose(f, head) == compose(head, map(f));
+
+// filter :: (a -> Bool) -> [a] -> [a]
+compose(map(f), filter(compose(p, f))) == compose(filter(p), map(f));
+```
+
+这些等式是直接根据类型可以推断出来的
+
+第一个例子中，等式左边说的是，先获取数组的`头部`，然后对它调用函数 `f`；等式右边说的是，先对数组中的每一个元素调用 `f`，然后再取其返回结果的`头部`。这两个表达式的作用是相等的，但是前者要快得多。
+
+第二个例子 `filter` 也是一样。等式左边是说，先组合 `f` 和 `p` 检查哪些元素要过滤掉，然后再通过 `map` 实际调用 `f`（别忘了 `filter` 是不会改变数组中元素的，这就保证了 `a` 将保持不变）；等式右边是说，先用 `map` 调用 `f`，然后再根据 `p` 过滤元素。这两者也是相等的。
+
+### 类型约束（type constraints）
+
+签名也可以把类型约束为一个特定的接口
+
+```js
+// sort :: Ord a => [a] -> [a]
+```
+
+比如上面的注释表明 a变量是一个Ord对象.
+
