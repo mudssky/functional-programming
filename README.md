@@ -658,6 +658,43 @@ var loudLastUpper = compose(angry, last);
 // 更多变种...
 ```
 
+#### 态射 (Morphism)
+
+一个变形的函数。
+
+**自同态 (Endomorphism)**
+
+输入输出是相同类型的函数。
+
+```js
+// uppercase :: String -> String
+const uppercase = (str) => str.toUpperCase()
+
+// decrement :: Number -> Number
+const decrement = (x) => x - 1
+```
+
+
+
+**同构 (Isomorphism)**
+
+不用类型对象的变形，保持结构并且不丢失数据。
+
+例如，一个二维坐标既可以表示为数组 `[2, 3]`，也可以表示为对象 `{x: 2, y: 3}`。
+
+```js
+// 提供函数在两种类型间互相转换
+const pairToCoords = (pair) => ({x: pair[0], y: pair[1]})
+
+const coordsToPair = (coords) => [coords.x, coords.y]
+
+coordsToPair(pairToCoords([1, 2])) // [1, 2]
+
+pairToCoords(coordsToPair({x: 1, y: 2})) // {x: 1, y: 2}
+```
+
+
+
 ### 2.identity态射
 
 让我们介绍一个名为 `id` 的实用函数。这个函数接受随便什么输入然后原封不动地返回它：
@@ -891,4 +928,300 @@ compose(map(f), filter(compose(p, f))) == compose(filter(p), map(f));
 ```
 
 比如上面的注释表明 a变量是一个Ord对象.
+
+
+
+## 05.函子 (Functor)
+
+一个实现了map 函数的对象，map 会遍历对象中的每个值并生成一个新的对象。遵守两个准则
+
+**一致性 (Preserves identity)**
+
+```js
+object.map(x => x) ≍ object
+```
+
+**组合性 (Composable)**
+
+```js
+object.map(compose(f, g)) ≍ object.map(g).map(f)  // f, g 为任意函数
+```
+
+在 javascript 中一个常见的函子是 Array, 因为它遵守因子的两个准则。
+
+```js
+const f = x => x + 1
+const g = x => x * 2
+
+;[1, 2, 3].map(x => f(g(x)))
+;[1, 2, 3].map(g).map(f)
+```
+
+**Pointed Functor**
+
+一个实现了 of 函数的对象。
+
+ES2015 添加了 `Array.of`，使 Array 成为了 Pointed Functor。
+
+```
+Array.of(1)
+```
+
+下面我们从关于functor开始介绍
+
+### 1.容器（container）
+
+下面我们封装一个能装载任意类型值的容器.
+
+容器是一个对象,使用of作为构造器(Pointed Functor),因为对象默认的new关键字在函数式编程里还是太别扭了.
+
+使用typescript的实现如下
+
+其中我们把of作为一个static方法,这样就可以直接通过类名调用了,相当于一个简单工厂函数.
+
+```typescript
+class Container {
+  private value: any
+  constructor(value: any) {
+    this.value = value
+  }
+
+  static of(value: any) {
+    return new Container(value)
+  }
+}
+```
+
+下面我们可以试试这个容器
+
+```javascript
+> Container.of(3)
+Container { value: 3 }
+> Container.of('hotdogs')
+Container { value: 'hotdogs' }
+> Container.of(Container.of({ name: 'yoda' }))
+Container { value: Container { value: { name: 'yoda' } } }
+```
+
+
+
+- `Container` 是个只有一个属性的对象。尽管容器可以有不止一个的属性，但大多数容器还是只有一个。
+- `value` 不能是某个特定的类型，不然 `Container` 就对不起它这个名字了。
+- 数据一旦存放到 `Container`，就会一直待在那儿。我们*可以*用 `.value` 获取到数据，但这样做有悖初衷,所以这里使用了private关键字防止外部访问.
+
+### 2.map函数
+
+容器有了值以后,我们还需要一个让别的函数能够操作它的方法.
+
+我们可以定义一个map方法,类似于数组的map.
+
+只不过这个map和数组map的区别是,这个map的参数是容器,作用是把容器里的值交给你定义好的函数处理.
+
+下面是这个map方法的实现
+
+```typescript
+// (a -> b) -> Container a -> Container b
+map(f: (...args: any) => any):any {
+      return Container.of(f(this.value))
+  }
+```
+
+
+
+```js
+Container.of(2).map(function(two){ return two + 2 })
+//=> Container(4)
+
+
+Container.of("flamethrowers").map(function(s){ return s.toUpperCase() })
+//=> Container("FLAMETHROWERS")
+
+
+Container.of("bombs").map(concat(' away')).map(_.prop('length'))
+//=> Container(10)
+```
+
+这个map方法使得我们可以直接处理容器,而不用把容器中的值拿出来这一步.而且map函数执行完后,容器内的值并不会变化,保持了不变性.
+
+因为map的返回值是container,所以只要我们在map调用后再返回容器,就可以无限地用map链式调用下去...
+
+
+
+### 3.Maybe  一种带空值检查的functor
+
+Container类似于Identity函数,会返回传入的值.
+
+过于单纯了,其实我们还可以添加对传入值的处理,比如检查传入的值是否为空
+
+下面是代码实现
+
+```typescript
+/**
+ * Maybe 容器类，
+ * 实现了map函数，并且map执行之前有空值检查
+ */
+class Maybe {
+  private value: any
+  constructor(value: any) {
+    this.value = value
+  }
+  static of(value: any) {
+    return new Maybe(value)
+  }
+  isNothing() {
+    return this.value === null || this.value === undefined
+  }
+  map(f: (...args: any) => any) {
+    return this.isNothing() ? Maybe.of(null) : Maybe.of(f(this.value))
+  }
+}
+export default Maybe
+```
+
+使用这个Maybe容器的好处是,出现null的时候就不会报错了,因为每次执行之前都有空值检查,如果有一次是null,后续的map无论执行多少次都是null.
+
+
+
+### 4.更通用的map
+
+我们使用柯里化,可以定义一个map可以应用到所有functor上面.这样我们就能像处理普通函数的参数一样处理functor了.
+
+```js
+//  map :: Functor f => (a -> b) -> f a -> f b
+var map = curry(function(f, any_functor_at_all) {
+  return any_functor_at_all.map(f);
+});
+```
+
+### 5.Maybe使用场景
+
+`Maybe` 最常用在那些可能会无法成功返回结果的函数中。
+
+```js
+//  safeHead :: [a] -> Maybe(a)
+var safeHead = function(xs) {
+  return Maybe.of(xs[0]);
+};
+
+var streetName = compose(map(_.prop('street')), safeHead, _.prop('addresses'));
+
+streetName({addresses: []});
+// Maybe(null)
+
+streetName({addresses: [{street: "Shady Ln.", number: 4201}]});
+// Maybe("Shady Ln.")
+```
+
+有时候函数可以明确返回一个 `Maybe(null)` 来表明失败
+
+### 6.纯错误处理
+
+`throw/catch`并非纯错误处理,因为他们抛出错误的时候,函数不会收到返回值.
+
+下面我们用一种更友好的方式来进行处理.
+
+下面是使用Either进行错误处理的实现,其中Left和Right是Either的子类.
+
+Left调用map只会返回自身,所以我们在出错的时候返回Left最后错误的结果就会传递到末尾.
+
+```typescript
+class Left {
+  private value: any
+  constructor(value: any) {
+    this.value = value
+  }
+  static of(value: any) {
+    return new Left(value)
+  }
+  map(f: (...args: any) => any): Left {
+    return this
+  }
+}
+class Right {
+  private value: any
+  constructor(value: any) {
+    this.value = value
+  }
+  static of(value: any) {
+    return new Right(value)
+  }
+  map(f: (...args: any) => any): Right {
+    return Right.of(f(this.value))
+  }
+}
+
+```
+
+下面是具体的使用例子
+
+```javascript
+var moment = require('moment');
+
+//  getAge :: Date -> User -> Either(String, Number)
+var getAge = curry(function(now, user) {
+  var birthdate = moment(user.birthdate, 'YYYY-MM-DD');
+  if(!birthdate.isValid()) return Left.of("Birth date could not be parsed");
+  return Right.of(now.diff(birthdate, 'years'));
+});
+
+getAge(moment(), {birthdate: '2005-12-12'});
+// Right(9)
+
+getAge(moment(), {birthdate: 'balloons!'});
+// Left("Birth date could not be parsed")
+```
+
+我们也可以使用柯里化,把either变成一个用于错误处理的函数
+
+```js
+//  either :: (a -> c) -> (b -> c) -> Either a b -> c
+var either = curry(function(f, g, e) {
+  switch(e.constructor) {
+    case Left: return f(e.__value);
+    case Right: return g(e.__value);
+  }
+});
+
+//  zoltar :: User -> _
+// 这里的id函数仅仅用于传递值给log
+var zoltar = compose(console.log, either(id, fortune), getAge(moment()));
+
+zoltar({birthdate: '2005-12-12'});
+// "If you survive, you will be 10"
+// undefined
+
+zoltar({birthdate: 'balloons!'});
+// "Birth date could not be parsed"
+// undefined
+```
+
+### 7.副作用处理
+
+## Lift
+
+lifting指的是你取一个值把他放到对象中,比如说一个functor.如果你把一个函数lift到
+
+Lifting is when you take a value and put it into an object like a [functor](https://github.com/hemanth/functional-programming-jargon#pointed-functor). If you lift a function into an [Applicative Functor](https://github.com/hemanth/functional-programming-jargon#applicative-functor) then you can make it work on values that are also in that functor.
+
+Some implementations have a function called `lift`, or `liftA2` to make it easier to run functions on functors.
+
+```
+const liftA2 = (f) => (a, b) => a.map(f).ap(b) // note it's `ap` and not `map`.
+
+const mult = a => b => a * b
+
+const liftedMult = liftA2(mult) // this function now works on functors like array
+
+liftedMult([1, 2], [3]) // [3, 6]
+liftA2(a => b => a + b)([1, 2], [3, 4]) // [4, 5, 5, 6]
+```
+
+Lifting a one-argument function and applying it does the same thing as `map`.
+
+```
+const increment = (x) => x + 1
+
+lift(increment)([2]) // [3]
+;[2].map(increment) // [3]
+```
 
