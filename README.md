@@ -206,7 +206,7 @@ const greet = () => 'hello, world.'
 
 js毕竟是个单线程的语言，在其他多线程的语言里面这个作用就比较明显了，比如golang，比如julia，利用纯函数的特性并行计算，可以充分利用计算机的性能。
 
-## 02.柯里化
+## 02.柯里化(Currying)
 
 **柯里化**  将一个多元函数转变为一元函数的过程。 每当函数被调用时，它仅仅接收一个参数并且返回带有一个参数的函数，直到传递完所有的参数。
 
@@ -615,5 +615,185 @@ test('curry placeholder', () => {
   expect(curriedFn(1)(curry, 3)(4)(5)(2)).toEqual(expected)
   expect(curriedFn(1)(2, 3)(curry, curry)(4)(5)).toEqual(expected)
 })
+```
+
+## 03.函数组合 (Function Composing)
+
+接收多个函数作为参数，从右到左，一个函数的输入为另一个函数的输出。
+
+```javascript
+const compose = (f, g) => (a) => f(g(a))    // 定义
+const floorAndToString = compose((val) => val.toString(), Math.floor) // 使用
+floorAndToString(12.12)   // '12'
+```
+
+下面从相关的术语开始介绍.
+
+### 1.范畴 (Category)
+
+在范畴论中，范畴是指对象集合及它们之间的态射 (morphism)。在编程中，数据类型作为对象，函数作为态射。
+
+一个有效的范畴遵从以下三个原则：
+
+1. 必有一个 identity 态射，使得 map 一个对象是它自身。`a` 是范畴里的一个对象时，必有一个函数使 `a -> a`。
+2. 态射必是可组合的。`a`，`b`，`c` 是范畴里的对象，`f` 是态射 `a -> b`，`g` 是 `b -> c` 态射。`g(f(x))` 一定与 `(g ● f)(x)` 是等价的。
+3. 组合满足结合律。`f ● (g ● h)` 与 `(f ● g) ● h` 是等价的。
+
+由于组合的结合律,我们一连串函数的组合,就可以像积木一样任意拆分了,具有很大的灵活性.
+
+下面是一个典型的例子
+
+```javascript
+var loudLastUpper = compose(exclaim, toUpperCase, head, reverse);
+
+// 或
+var last = compose(head, reverse);
+var loudLastUpper = compose(exclaim, toUpperCase, last);
+
+// 或
+var last = compose(head, reverse);
+var angry = compose(exclaim, toUpperCase);
+var loudLastUpper = compose(angry, last);
+
+// 更多变种...
+```
+
+### 2.identity态射
+
+让我们介绍一个名为 `id` 的实用函数。这个函数接受随便什么输入然后原封不动地返回它：
+
+```javascript
+var id = function(x){ return x; };
+```
+
+有下面的例子
+
+```javascript
+// identity
+compose(id, f) == compose(f, id) == f;
+// true
+```
+
+因为id函数返回传入的参数的特性,相当于它就什么都没做,有他没他一个样,所以就有了上面的等式.
+
+id函数就相当于乘法运算里的1,加法运算里的0.同时compose和这两种运算一样都是满足结合律的.
+
+下面我们要实现的compose函数,当你不传入参数进行调用时,就是返回一个id函数
+
+
+
+### 3.Point-Free 风格 (Point-Free Style)
+
+定义函数时，不显式地指出函数所带参数。这种风格通常需要柯里化或者高阶函数。也叫 Tacit programming。
+
+```javascript
+const map = (fn) => (list) => list.map(fn)
+const add = (a) => (b) => a + b
+
+# Points-Free   list 是显式参数
+const incrementAll = (numbers) => map(add(1))(numbers)
+
+# Points-Free   list 是隐式参数
+const incrementAll2 = map(add(1))
+```
+
+`incrementAll` 识别并且使用了 `numbers` 参数，因此它不是 Point-Free 风格的。 `incrementAll2` 连接函数与值，并不提及它所使用的参数，因为它是 Point-Free 风格的。
+
+Point-Free 风格的函数就像平常的赋值，不使用 `function` 或者 `=>`。
+
+point free最明显的好处是,能够帮助我们减少不必要的命名，让代码保持简洁和通用。毕竟现在的ide都很智能了,如果我们要看函数的参数,直接光标移到函数上就能显示出来了,没必要特意写出参数,这样代码会更简洁.
+
+### 4.typescript实现接收任意个函数参数的compose函数
+
+我们只需要接收任意个函数参数,然后用reduce循环套娃就可以了.
+
+```typescript
+/**
+ * 组合任意多个函数
+ * @param funcs 被组合的函数
+ * @returns 返回组合后的函数
+ */
+
+function compose(...funcs: ((...args: any) => any)[]) {
+  if (funcs.length === 0) {
+    //   compose不传入参数的情况,返回一个返回输入的函数,也就是id函数
+    return (x: any) => x
+  }
+  if (funcs.length === 1) {
+    return funcs[0]
+  }
+  return funcs.reduce(function (
+    a: (...args: any) => any,
+    b: (...args: any) => any
+  ): (...args: any) => any {
+    return (...args: any) => {
+      return a(b(...args))
+    }
+  })
+}
+export default compose
+
+```
+
+下面是编译成es6后的代码
+
+```javascript
+"use strict";
+/**
+ * 组合任意多个函数
+ * @param funcs 被组合的函数
+ * @returns 返回组合后的函数
+ */
+function compose(...funcs) {
+    if (funcs.length === 0) {
+        //   compose不传入参数的情况,返回一个返回输入的函数,也就是id函数
+        return (x) => x;
+    }
+    if (funcs.length === 1) {
+        return funcs[0];
+    }
+    return funcs.reduce(function (a, b) {
+        return (...args) => {
+            return a(b(...args));
+        };
+    });
+}
+```
+
+### 5.使用jest测试组合函数
+
+```typescript
+import compose from '../../fp-lib/compose'
+
+test('normal compose', () => {
+  const add = (x) => x + 1
+  expect(compose(add, add, add, add, add)(0)).toBe(5)
+
+  // 测试0个参数时
+  expect(compose()(add)).toBe(add)
+  // 测试1个参数时
+  expect(compose(add)).toBe(add)
+})
+```
+
+### 6.组合中的debug
+
+组合就类似于shell中的管道,因此比较常见的debug方法就是把在管道的某处把数据打印出来查看.
+
+我们可以实现一个trace函数来进行debug.
+
+下面是typescript中的一个具体的实现,
+
+这样我们在组合中加入这个函数,可以查看某处的数据,并且不会影响后续的数据流
+
+```typescript
+import curry from './curry'
+
+const trace = curry(function (tag: string, x: any): any {
+  console.log(tag, x)
+  return x
+})
+
+export default trace
 ```
 
