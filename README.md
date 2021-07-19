@@ -1195,17 +1195,271 @@ zoltar({birthdate: 'balloons!'});
 // undefined
 ```
 
+
+
 ### 7.副作用处理
 
-## Lift
+有很多函数都有副作用，但是我们可以通过把它包裹在另一个函数里的方式把它变得看起来像一个纯函数。
 
-lifting指的是你取一个值把他放到对象中,比如说一个functor.如果你把一个函数lift到
+其实就是把函数再包裹一层，执行的时候就会返回函数本身罢了。
 
-Lifting is when you take a value and put it into an object like a [functor](https://github.com/hemanth/functional-programming-jargon#pointed-functor). If you lift a function into an [Applicative Functor](https://github.com/hemanth/functional-programming-jargon#applicative-functor) then you can make it work on values that are also in that functor.
+下面是一个例子
 
-Some implementations have a function called `lift`, or `liftA2` to make it easier to run functions on functors.
+```typescript
+import compose from './compose'
+class IO {
+  // 保存函数的容器
+  __fn: (...args: any) => any
 
+  constructor(fn: (...args: any) => any) {
+    this.__fn = fn
+  }
+
+  static of(x: any) {
+    return new IO(function () {
+      return x
+    })
+  }
+
+  map(f: (...args: any) => any) {
+    return new IO(compose(f, this.__fn))
+  }
+}
 ```
+
+io容器用来包裹产生副作用的函数。
+
+这样做的好处是，把责任推迟到调用的时候，变量用`  __fn`命名，是为了起到警示作用，告诉调用者，这个部分是有副作用的。
+
+下面是个调用的例子
+
+```typescript
+////// 纯代码库: lib/params.js ///////
+
+//  url :: IO String
+var url = new IO(function() { return window.location.href; });
+
+//  toPairs =  String -> [[String]]
+var toPairs = compose(map(split('=')), split('&'));
+
+//  params :: String -> [[String]]
+var params = compose(toPairs, last, split('?'));
+
+//  findParam :: String -> IO Maybe [String]
+var findParam = function(key) {
+  return map(compose(Maybe.of, filter(compose(eq(key), head)), params), url);
+};
+
+////// 非纯调用代码: main.js ///////
+
+// 调用 __fn() 来运行它！
+findParam("searchTerm").__fn();
+// Maybe(['searchTerm', 'wafflehouse'])
+```
+
+
+
+### 8.关于functor的一些理论
+
+同一律和结合律
+
+```js
+// identity
+map(id) === id;
+// composition
+compose(map(f), map(g)) === map(compose(f, g));
+```
+
+
+
+## 06.Monad
+
+拥有 `of` 和 `chain` 函数的对象。`chain` 很像 `map`， 除了用来铺平嵌套数据。
+
+```js
+Array.prototype.chain = function (f) {
+  return this.reduce((acc, it) => acc.concat(f(it)), [])  
+}
+
+// ['cat', 'dog', 'fish', 'bird']
+;Array.of('cat,dog', 'fish,bird').chain(s => s.split(','))
+
+// [['cat', 'dog'], ['fish', 'bird']]
+;Array.of('cat,dog', 'fish,bird').map(s => s.split(','))
+```
+
+在有些语言中，`of` 也称为 `return`，`chain` 也称为 `flatmap` 与 `bind`。
+
+
+
+### 1.join方法
+
+下面是一个例子，当functor之间存在嵌套的时候，我们需要新的解决方案，
+
+因为这种情况下，你需要调用多次才能取到值。
+
+```js
+// Support
+// ===========================
+var fs = require('fs');
+
+//  readFile :: String -> IO String
+var readFile = function(filename) {
+  return new IO(function() {
+    return fs.readFileSync(filename, 'utf-8');
+  });
+};
+
+//  print :: String -> IO String
+var print = function(x) {
+  return new IO(function() {
+    console.log(x);
+    return x;
+  });
+}
+
+// Example
+// ===========================
+//  cat :: IO (IO String)
+var cat = compose(map(print), readFile);
+
+cat(".git/config")
+// IO(IO("[core]\nrepositoryformatversion = 0\n"))
+```
+
+下面我们定义一个join函数，作用就是把嵌套解开，直接返回容器包裹的值，这样就不会出现容器包容器的事情了。
+
+下面是一个实例
+
+```js
+//  join :: Monad m => m (m a) -> m a
+var join = function(mma){ return mma.join(); }
+
+//  firstAddressStreet :: User -> Maybe Street
+var firstAddressStreet = compose(
+  join, map(safeProp('street')), join, map(safeHead), safeProp('addresses')
+);
+
+firstAddressStreet(
+  {addresses: [{street: {name: 'Mulburry', number: 8402}, postcode: "WC2N" }]}
+);
+// Maybe({name: 'Mulburry', number: 8402})
+```
+
+### 2.chain
+
+我们只要紧跟着map后面调用join，就是chain函数了。
+
+chain又称为flatMap
+
+```js
+//  chain :: Monad m => (a -> m b) -> m a -> m b
+var chain = curry(function(f, m){
+  return m.map(f).join(); // 或者 compose(join, map(f))(m)
+});
+```
+
+## 07.Applicative Functor
+
+一个拥有 ap 函数的对象。
+
+```js
+// 实现
+Array.prototype.ap = function (xs) {
+    return this.reduce((acc, f) => acc.concat(xs.map(f)), [])
+}
+
+// 示例
+;[(a) => a + 1].ap([1]) // [2]
+```
+
+如果你有两个对象，并需要对他们的元素执行一个二元函数
+
+```js
+// Arrays that you want to combine
+const arg1 = [1, 3]
+const arg2 = [4, 5]
+
+// combining function - must be curried for this to work
+const add = (x) => (y) => x + y
+
+const partiallyAppliedAdds = [add].ap(arg1) // [(y) => 1 + y, (y) => 3 + y]
+```
+
+由此得到了一个函数数组，并且可以调用 `ap` 函数得到结果
+
+```js
+partiallyAppliedAdds.ap(arg2) // [5, 6, 7, 8]
+```
+
+### 1.ap函数
+
+当我们相对容器中的值直接计算，把一个容器作为参数传递给另一个容器，我们发现是非常困难的。
+
+```js
+// 这样是行不通的，因为 2 和 3 都藏在瓶子里。
+add(Container.of(2), Container.of(3));
+//NaN
+
+// 使用可靠的 map 函数试试
+var container_of_add_2 = map(add, Container.of(2));
+// Container(add(2))
+```
+
+我们可以用chain函数达到效果
+
+```js
+Container.of(2).chain(function(two) {
+  return Container.of(3).map(add(two));
+});
+```
+
+但是这种方式的缺点很明显，那就是 monad 的顺序执行问题：所有的代码都只会在前一个 monad 执行完毕之后才执行。
+
+
+
+实际上我们可以用ap来实现这个效果
+
+`ap` 就是一种函数，能够把一个 functor 的函数值应用到另一个 functor 的值上。
+
+下面是一个简单的实现。
+
+```js
+Container.prototype.ap = function(other_container) {
+  return other_container.map(this.__value);
+}
+```
+
+这样我们就可以针对容器进行操作了。
+
+在容器中封装一个curry化好的add函数，这样，后续可以调用ap传入其他容器
+
+```js
+Container.of(add(2)).ap(Container.of(3));
+// Container(5)
+
+// all together now
+Container.of(2).map(add).ap(Container.of(3));
+// Container(5)
+```
+
+
+
+下面有一个特性
+
+```js
+F.of(x).map(f) == F.of(f).ap(F.of(x))
+```
+
+翻译过来就是，map 一个 `f` 等价于 `ap` 一个值为 `f` 的 functor
+
+### 2.lift
+
+Lifting指的是当你有放在对象里的值，比如各种functor，你可以把他们里面的值用ap调用。
+
+有些实现会命名为 `lift`, `liftA2` 
+
+```js
 const liftA2 = (f) => (a, b) => a.map(f).ap(b) // note it's `ap` and not `map`.
 
 const mult = a => b => a * b
@@ -1216,12 +1470,124 @@ liftedMult([1, 2], [3]) // [3, 6]
 liftA2(a => b => a + b)([1, 2], [3, 4]) // [4, 5, 5, 6]
 ```
 
-Lifting a one-argument function and applying it does the same thing as `map`.
+Lifting 针对只有一个参数的函数的时候效果等于 `map`.
 
-```
+```js
 const increment = (x) => x + 1
 
 lift(increment)([2]) // [3]
 ;[2].map(increment) // [3]
+```
+
+下面是Lift函数实现的例子
+
+```js
+var liftA2 = curry(function(f, functor1, functor2) {
+  return functor1.map(f).ap(functor2);
+});
+
+var liftA3 = curry(function(f, functor1, functor2, functor3) {
+  return functor1.map(f).ap(functor2).ap(functor3);
+});
+
+//liftA4, etc
+```
+
+下面是用例：
+
+```js
+// checkEmail :: User -> Either String Email
+// checkName :: User -> Either String String
+
+//  createUser :: Email -> String -> IO User
+var createUser = curry(function(email, name) { /* creating... */ });
+
+Either.of(createUser).ap(checkEmail(user)).ap(checkName(user));
+// Left("invalid email")
+
+liftA2(createUser, checkEmail(user), checkName(user));
+// Left("invalid email")
+```
+
+我们用lift重写上面的用例
+
+```js
+liftA2(add, Maybe.of(2), Maybe.of(3));
+// Maybe(5)
+
+liftA2(renderPage, Http.get('/destinations'), Http.get('/events'))
+// Task("<div>some page with dest and events</div>")
+
+liftA3(signIn, getVal('#email'), getVal('#password'), IO.of(false));
+// IO({id: 3, email: "gg@allin.com"})
+```
+
+### 3.相关的范畴学知识
+
+#### 同一律（identity）
+
+```js
+// 同一律
+A.of(id).ap(v) == v
+```
+
+是的，对一个 functor 应用 `id` 函数不会改变 `v` 里的值。比如：
+
+```js
+var v = Identity.of("Pillow Pets");
+Identity.of(id).ap(v) == v
+```
+
+`Identity.of(id)` 的“无用性”让我不禁莞尔。这里有意思的一点是，就像我们之前证明了的，`of/ap` 等价于 `map`，因此这个同一律遵循的是 functor 的同一律：`map(id) == id`。
+
+使用这些定律的优美之处在于，就像一个富有激情的幼儿园健身教练让所有的小朋友都能愉快地一块玩耍一样，它们能够强迫所有的接口都能完美结合。
+
+#### 同态（homomorphism）
+
+```js
+// 同态
+A.of(f).ap(A.of(x)) == A.of(f(x))
+```
+
+*同态*就是一个能够保持结构的映射（structure preserving map）。实际上，functor 就是一个在不同范畴间的同态，因为 functor 在经过映射之后保持了原始范畴的结构。
+
+事实上，我们不过是把普通的函数和值放进了一个容器，然后在里面进行各种计算。所以，不管是把所有的计算都放在容器里（等式左边），还是先在外面进行计算然后再放到容器里（等式右边），其结果都是一样的。
+
+一个简单例子：
+
+```js
+Either.of(_.toUpper).ap(Either.of("oreos")) == Either.of(_.toUpper("oreos"))
+```
+
+#### 互换（interchange）
+
+互换（interchange）表明的是选择让函数在 `ap` 的左边还是右边发生 lift 是无关紧要的。
+
+```js
+// 互换
+v.ap(A.of(x)) == A.of(function(f) { return f(x) }).ap(v)
+```
+
+这里有个例子：
+
+```js
+var v = Task.of(_.reverse);
+var x = 'Sparklehorse';
+
+v.ap(Task.of(x)) == Task.of(function(f) { return f(x) }).ap(v)
+```
+
+#### 组合（composition）
+
+最后是组合。组合不过是在检查标准的函数组合是否适用于容器内部的函数调用。
+
+```js
+// 组合
+A.of(compose).ap(u).ap(v).ap(w) == u.ap(v.ap(w));
+var u = IO.of(_.toUpper);
+var v = IO.of(_.concat("& beyond"));
+var w = IO.of("blood bath ");
+
+IO.of(_.compose).ap(u).ap(v).ap(w) == u.ap(v.ap(w))
 ```
 
